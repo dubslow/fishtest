@@ -114,13 +114,16 @@
                 % else:
                   ${run['args']['num_games']}
                 % endif
-                @
                 <%
-                   tc_ratio = estimate_game_duration(run['args']['tc']) / estimate_game_duration("10+0.1")
-                   ## SMP-STC = 5+0.5 * 8 th --> tc_ratio == 4
-                   ltc_marked = "<mark>{}</mark>" if tc_ratio > 4 and 'sprt' in run['args'] else "{}"
+                    tc_ratio = run["args"]["threads"] * estimate_game_duration(run["args"]["tc"]) \
+                                                      / estimate_game_duration("10+0.1")
                 %>
-                ${ltc_marked.format(f"{run['args']['tc']} th {str(run['args'].get('threads',1))}")}
+                ## SMP-STC = 5+0.5 * 8 th --> tc_ratio == 4
+                % if 'sprt' in run['args'] and tc_ratio > 4:
+                    @ <mark> ${run['args']['tc']} th ${str(run['args'].get('threads',1))} </mark>
+                % else:
+                    @ ${run['args']['tc']} th ${str(run['args'].get('threads',1))}
+                % endif
                 <br>
                 ${f"itp: {round(run['args']['itp'])} " if not run['finished'] else ''}
                 ${f"cores: {run['cores']}" if not run['finished'] and 'cores' in run else ''}
