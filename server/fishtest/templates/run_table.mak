@@ -9,7 +9,7 @@
 % endif
 
 <%
-  from fishtest.util import get_cookie
+  from fishtest.util import get_cookie, estimate_game_duration
   if toggle:
     cookie_name = toggle+"_state"
 %>
@@ -114,7 +114,13 @@
                 % else:
                   ${run['args']['num_games']}
                 % endif
-                @ ${run['args']['tc']} th ${str(run['args'].get('threads',1))}
+                @
+                <%
+                   tc_ratio = estimate_game_duration(run['args']['tc']) / estimate_game_duration("10+0.1")
+                   ## SMP-STC = 5+0.5 * 8 th --> tc_ratio == 4
+                   ltc_marked = "<mark>{}</mark>" if tc_ratio > 4 and 'sprt' in run['args'] else "{}"
+                %>
+                ${ltc_marked.format(f"{run['args']['tc']} th {str(run['args'].get('threads',1))}")}
                 <br>
                 ${f"itp: {round(run['args']['itp'])} " if not run['finished'] else ''}
                 ${f"cores: {run['cores']}" if not run['finished'] and 'cores' in run else ''}
