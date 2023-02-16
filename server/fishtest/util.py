@@ -36,7 +36,7 @@ def worker_name(worker_info):
     return name
 
 
-def get_chi2(tasks, exclude_workers=set()):
+def get_chi2(tasks, exclude_workers=set()): # All (global) invocations of this function share the same set() (!)
     """Perform chi^2 test on the stats from each worker"""
 
     default_results = {
@@ -164,16 +164,13 @@ def crash_or_time(task):
     return crashes > 3 or (total > 20 and time_losses / total > 0.1)
 
 
-def get_bad_workers(tasks, cached_chi2=None, p=0.001, res=7.0, iters=1):
-    # If we have an up-to-date result of get_chi2() we can pass
-    # it as cached_chi2 to avoid needless recomputation.
+def get_bad_workers_by_residual(tasks, chi2=None, p=0.001, res=7.0, iters=1):
+    # If we have an up-to-date result of get_chi2(), pass it to avoid needless
+    # recomputation.
     bad_workers = set()
     for _ in range(iters):
-        if cached_chi2 is None:
+        if chi2 is None:
             chi2 = get_chi2(tasks, exclude_workers=bad_workers)
-        else:
-            chi2 = cached_chi2
-            cached_chi2 = None
         worst_user = {}
         residuals = chi2["residual"]
         for worker_key in residuals:
@@ -190,13 +187,11 @@ def get_bad_workers(tasks, cached_chi2=None, p=0.001, res=7.0, iters=1):
     return bad_workers
 
 
-def update_residuals(tasks, cached_chi2=None):
-    # If we have an up-to-date result of get_chi2() we can pass
-    # it as cached_chi2 to avoid needless recomputation.
-    if cached_chi2 is None:
+def update_residuals(tasks, chi2=None):
+    # If we have an up-to-date result of get_chi2(), pass it to avoid needless
+    # recomputation.
+    if chi2 is None:
         chi2 = get_chi2(tasks)
-    else:
-        chi2 = cached_chi2
     residuals = chi2["residual"]
 
     for task in tasks:

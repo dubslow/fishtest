@@ -22,7 +22,7 @@ from fishtest.util import (
     estimate_game_duration,
     format_bounds,
     format_results,
-    get_bad_workers,
+    get_bad_workers_by_residual,
     get_chi2,
     get_hash,
     get_tc_ratio,
@@ -1245,15 +1245,13 @@ class RunDb:
         now = datetime.utcnow()
         if "start_time" not in run or (now - run["start_time"]).days > 30:
             return "Run too old to be purged"
-        # Do not revive failed runs
         if run.get("failed", False):
-            return "You cannot purge a failed run"
+            return "You cannot purge, and thus revive, a failed run"
         message = "No bad workers"
-        # Transfer bad tasks to run["bad_tasks"]
+
+        # Transfer bad tasks to run["bad_tasks"], by crashes/time losses
         if "bad_tasks" not in run:
             run["bad_tasks"] = []
-
-        tasks = copy.copy(run["tasks"])
         zero_stats = {
             "wins": 0,
             "losses": 0,
@@ -1262,7 +1260,7 @@ class RunDb:
             "time_losses": 0,
             "pentanomial": 5 * [0],
         }
-
+        tasks = copy.copy(run["tasks"])
         for task_id, task in enumerate(tasks):
             if "bad" in task:
                 continue
@@ -1289,24 +1287,23 @@ class RunDb:
                 task["stats"] = copy.deepcopy(zero_stats)
 
         chi2 = get_chi2(run["tasks"])
-        # Make sure the residuals are up to date.
-        # Once a task is moved to run["bad_tasks"] its
-        # residual will no longer change.
-        update_residuals(run["tasks"], cached_chi2=chi2)
-        bad_workers = get_bad_workers(
+        # Make sure the residuals are up to date. Once a task is moved to
+        # run["bad_tasks"] its residual will no longer change.
+        update_residuals(run["tasks"], chi2=chi2)
+        bad_workers = get_bad_workers_by_residual(
             run["tasks"],
-            cached_chi2=chi2,
+            chi2=chi2,
             p=p,
             res=res,
             iters=iters - 1 if message == "" else iters,
         )
+        # Once again we filter bad tasks into run["bad_tasks"], this time by residual
         tasks = copy.copy(run["tasks"])
         for task_id, task in enumerate(tasks):
             if "bad" in task:
                 continue
             if task["worker_info"]["unique_key"] in bad_workers:
                 message = ""
-                purged = True
                 bad_task = copy.deepcopy(task)
                 bad_task["task_id"] = task_id
                 bad_task["bad"] = True
