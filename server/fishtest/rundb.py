@@ -18,6 +18,7 @@ from fishtest.actiondb import ActionDb
 from fishtest.stats.stat_util import SPRT_elo
 from fishtest.userdb import UserDb
 from fishtest.util import (
+    BinaryHistory,
     crash_or_time,
     estimate_game_duration,
     format_bounds,
@@ -996,13 +997,17 @@ class RunDb:
     def handle_crash_or_time(self, run, task_id):
         purged = False
         task = run["tasks"][task_id]
+        worker = task["worker_info"]["unique_key"]
+        history = self.worker_runs[worker].get("crash_time_history", None) # Caution, we don't always have the proper lock for this!
+        if history is None:
+            history = self.worker_runs[worker]["crash_time_history"] = BinaryHistory(8)
         if crash_or_time(task):
             stats = task.get("stats", {})
             total = (
                 stats.get("wins", 0) + stats.get("losses", 0) + stats.get("draws", 0)
             )
             if not total:
-                return
+                return False
             crashes = stats.get("crashes", 0)
             time_losses = stats.get("time_losses", 0)
             message = f"Time losses:{time_losses}({time_losses/total:.1%}) Crashes:{crashes}({crashes/total:.1%})"
@@ -1012,11 +1017,18 @@ class RunDb:
                 task_id=task_id,
                 message=message,
             )
-            if worker_bad_history:
+            history.update(True)
+            # We have to guard against bad patches causing problems vs bad workers.
+            if history.sum() >= 3: # 3 or more bad tasks in the last 8
+                # If we're confident that the worker is bad (not the patch), then
+                # insta-purge this task in the middle of the run.
+                # Autopurge, *after* stopping a run, will purge crash_or_time regardless of history.
                 run["purged_tasks"].append(task_purge_and_copy(task))
                 # Having purged this task, we must recalculate the results without this task
                 run["results_stale"] = purged = True
                 self.buffer(run, False)
+        else:
+            history.update(False)
         return purged
 
     def update_task(self, worker_info, run_id, task_id, stats, spsa):
@@ -1118,7 +1130,7 @@ class RunDb:
                 run["workers"] -= 1
                 run["cores"] -= task["worker_info"]["concurrency"]
                 assert run["cores"] >= 0
-            purged = self.handle_crash_or_time(run, task_id)
+                purged = self.handle_crash_or_time(run, task_id)
 
         run["results_stale"] = True  # force recalculation of results
         updated_results = self.get_results(run, purged) # computed from
