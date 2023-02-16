@@ -191,29 +191,6 @@ def get_chi2(tasks, exclude_workers=set()): # All (global) invocations of this f
     }
 
 
-def get_bad_workers_by_residual(tasks, chi2=None, p=0.001, res=7.0, iters=1):
-    # If we have an up-to-date result of get_chi2(), pass it to avoid needless
-    # recomputation.
-    bad_workers = set()
-    for _ in range(iters):
-        if chi2 is None:
-            chi2 = get_chi2(tasks, exclude_workers=bad_workers)
-        worst_user = {}
-        residuals = chi2["residual"]
-        for worker_key in residuals:
-            if worker_key in bad_workers:
-                continue
-            if chi2["p"] < p or residuals[worker_key] > res:
-                if worst_user == {} or residuals[worker_key] > worst_user["residual"]:
-                    worst_user["unique_key"] = worker_key
-                    worst_user["residual"] = residuals[worker_key]
-        if worst_user == {}:
-            break
-        bad_workers.add(worst_user["unique_key"])
-
-    return bad_workers
-
-
 def update_residuals(tasks, chi2=None):
     # If we have an up-to-date result of get_chi2(), pass it to avoid needless
     # recomputation.
@@ -235,6 +212,29 @@ def update_residuals(tasks, chi2=None):
             task["residual_color"] = "yellow"
         else:
             task_mark_excessive_residual(task)
+
+
+def get_bad_workers_by_residual(tasks, chi2=None, p=0.001, res=7.0, iters=1):
+    # If we have an up-to-date result of get_chi2(), pass it to avoid needless
+    # recomputation.
+    bad_workers = set()
+    for _ in range(iters):
+        if chi2 is None:
+            chi2 = get_chi2(tasks, exclude_workers=bad_workers)
+        worst_user = {}
+        residuals = chi2["residual"]
+        for worker_key in residuals:
+            if worker_key in bad_workers:
+                continue
+            if chi2["p"] < p or residuals[worker_key] > res:
+                if worst_user == {} or residuals[worker_key] > worst_user["residual"]:
+                    worst_user["unique_key"] = worker_key
+                    worst_user["residual"] = residuals[worker_key]
+        if worst_user == {}:
+            break
+        bad_workers.add(worst_user["unique_key"])
+
+    return bad_workers
 
 
 def format_bounds(elo_model, elo0, elo1):
