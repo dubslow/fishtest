@@ -994,6 +994,7 @@ class RunDb:
         return ret
 
     def handle_crash_or_time(self, run, task_id):
+        purged = False
         task = run["tasks"][task_id]
         if crash_or_time(task):
             stats = task.get("stats", {})
@@ -1011,6 +1012,12 @@ class RunDb:
                 task_id=task_id,
                 message=message,
             )
+            if worker_bad_history:
+                run["purged_tasks"].append(task_purge_and_copy(task))
+                # Having purged this task, we must recalculate the results without this task
+                run["results_stale"] = purged = True
+                self.buffer(run, False)
+        return purged
 
     def update_task(self, worker_info, run_id, task_id, stats, spsa):
         lock = self.active_run_lock(str(run_id))
@@ -1087,7 +1094,7 @@ class RunDb:
             task["active"] = False
             return {"task_alive": False, "error": error}
 
-        # The update seems fine. Update run["tasks"][task_id] (=task).
+        # The update seems fine, or at least half-sane. Update run["tasks"][task_id] (=task).
 
         task["stats"] = stats
         task["last_updated"] = update_time
@@ -1103,6 +1110,7 @@ class RunDb:
 
         run["last_updated"] = update_time
 
+        purged = False
         if task_finished:
             # run["cores"] is also updated in request_task().
             # We use the same lock.
@@ -1110,39 +1118,31 @@ class RunDb:
                 run["workers"] -= 1
                 run["cores"] -= task["worker_info"]["concurrency"]
                 assert run["cores"] >= 0
+            purged = self.handle_crash_or_time(run, task_id)
 
         run["results_stale"] = True  # force recalculation of results
-        updated_results = self.get_results(
-            run, False
-        )  # computed from run["tasks"] which
-        # has just been updated. Sets run["results_stale"]=False.
+        updated_results = self.get_results(run, purged) # computed from
+        # run["tasks"] which has just been updated. Sets run["results_stale"]=False.
 
         if "sprt" in run["args"]:
             sprt = run["args"]["sprt"]
             fishtest.stats.stat_util.update_SPRT(updated_results, sprt)
-            if sprt["state"] != "":
-                task_finished = True
-                task["active"] = False
 
         if "spsa" in run["args"] and spsa_games == spsa["num_games"]:
             self.update_spsa(task["worker_info"]["unique_key"], run, spsa)
 
-        # Record tasks with an excessive amount of crashes or time losses in the event log
-
-        if task_finished:
-            self.handle_crash_or_time(run, task_id)
-
         # Check if the run is finished.
 
-        run_finished = False
-        if count_games(updated_results) >= run["args"]["num_games"]:
-            run_finished = True
-        elif "sprt" in run["args"] and sprt["state"] != "":
-            run_finished = True
+        run_finished = (
+               count_games(updated_results) >= run["args"]["num_games"]:
+               or "sprt" in run["args"] and sprt["state"] != ""
+        )
 
         # Return.
 
         if run_finished:
+            if not task_finished:
+                self.handle_crash_or_time(run, task_id)
             self.buffer(run, True)
             self.stop_run(run_id)
             # stop run may not actually stop a run because of autopurging!
