@@ -573,7 +573,7 @@ class RunDb:
         has_pentanomial = True
         pentanomial = 5 * [0]
         for task in run["tasks"]:
-            if "bad" in task:
+            if "purged" in task:
                 continue
             if "stats" in task:
                 stats = task["stats"]
@@ -1247,24 +1247,23 @@ class RunDb:
             return "Run too old to be purged"
         if run.get("failed", False):
             return "You cannot purge, and thus revive, a failed run"
-        message = "No bad workers"
-        if "bad_tasks" not in run:
-            run["bad_tasks"] = []
+        message = "No purged workers"
+        if "purged_tasks" not in run:
+            run["purged_tasks"] = []
 
-        # First, filter and mark bad tasks to run["bad_tasks"] by crashes/time losses
+        # First, purge tasks by crashes/time losses
         tasks = copy.copy(run["tasks"])
         for task_id, task in enumerate(tasks):
-            if "bad" in task:
+            if "purged" in task:
                 continue
-            # Special cases: crashes or time losses.
             if crash_or_time(task):
                 message = ""
-                run["bad_tasks"].append(task_mark_bad_and_copy(task))
+                run["purged_tasks"].append(task_purge_and_copy(task))
 
         chi2 = get_chi2(run["tasks"])
-        # Make sure the residuals are up to date. Once a task is moved to
-        # run["bad_tasks"] its residual will no longer change.
-        update_residuals(run["tasks"], chi2=chi2) # Marks residual color (and calls crash_or_time, marking such failures)
+        # Make sure the residuals are up to date. Once a task is purged to
+        # run["purged_tasks"] its residual will no longer change.
+        update_residuals(run["tasks"], chi2=chi2) # Marks residual color (and calls crash_or_time, marking such failures not already caught)
         bad_workers = get_bad_workers_by_residual(
             run["tasks"],
             chi2=chi2,
@@ -1272,14 +1271,14 @@ class RunDb:
             res=res,
             iters=iters - 1 if message == "" else iters,
         )
-        # Second, filter and mark bad tasks to run["bad_tasks"] by residual
+        # Second, purge tasks by residual
         tasks = copy.copy(run["tasks"])
         for task_id, task in enumerate(tasks):
-            if "bad" in task:
+            if "purged" in task:
                 continue
             if task["worker_info"]["unique_key"] in bad_workers:
                 message = ""
-                run["bad_tasks"].append(task_mark_bad_and_copy(task))
+                run["purged_tasks"].append(task_purge_and_copy(task))
 
         if message == "":
             run["results_stale"] = True

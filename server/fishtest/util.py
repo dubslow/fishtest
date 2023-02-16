@@ -53,12 +53,11 @@ def crash_or_time(task):
     return failed
 
 
-def task_mark_bad_and_copy(task):
-    # To preserve the number of tasks, we mark it as bad without removing it.
-    bad_task = copy.deepcopy(task)
-    bad_task["task_id"] = task_id
-    bad_task["bad"] = True
-    task["bad"] = True
+def task_purge_and_copy(task):
+    # To preserve the number of tasks, we mark it as purged without removing it.
+    purged_task = copy.deepcopy(task)
+    purged_task["task_id"] = task_id
+    purged_task["purged"] = task["purged"] = True
     task["active"] = False
     task["stats"] = {
             "wins": 0,
@@ -68,7 +67,7 @@ def task_mark_bad_and_copy(task):
             "time_losses": 0,
             "pentanomial": 5 * [0],
     })
-    return bad_task
+    return purged_task
 
 
 def get_chi2(tasks, exclude_workers=set()): # All (global) invocations of this function share the same set() (!)
@@ -87,9 +86,7 @@ def get_chi2(tasks, exclude_workers=set()): # All (global) invocations of this f
     users = {}
     has_pentanomial = None
     for task in tasks:
-        if "bad" in task:
-            continue
-        if "worker_info" not in task:
+        if "purged" in task or "worker_info" not in task:
             continue
         key = task["worker_info"]["unique_key"]
         if key in exclude_workers:
@@ -199,7 +196,7 @@ def update_residuals(tasks, chi2=None):
     residuals = chi2["residual"]
 
     for task in tasks:
-        if "bad" in task or crash_or_time(task) or "worker_info" not in task:
+        if "purged" in task or crash_or_time(task) or "worker_info" not in task:
             continue
 
         task["residual"] = residuals.get(
