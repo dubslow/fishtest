@@ -997,10 +997,12 @@ class RunDb:
     def handle_crash_or_time(self, run, task_id):
         purged = False
         task = run["tasks"][task_id]
-        worker = task["worker_info"]["unique_key"]
-        history = self.worker_runs[worker].get("crash_time_history", None) # Caution, we don't always have the proper lock for this!
+        worker = self.worker_runs.get(task["worker_info"]["unique_key"], None)
+        if worker is None:
+            worker = self.worker_runs[task["worker_info"]["unique_key"]] = {}
+        history = worker.get("crash_time_history", None) # Caution, we don't always have the proper lock for this!
         if history is None:
-            history = self.worker_runs[worker]["crash_time_history"] = BinaryHistory(8)
+            history = worker["crash_time_history"] = BinaryHistory(8)
         if crash_or_time(task):
             stats = task.get("stats", {})
             total = (
@@ -1146,7 +1148,7 @@ class RunDb:
         # Check if the run is finished.
 
         run_finished = (
-               count_games(updated_results) >= run["args"]["num_games"]:
+               count_games(updated_results) >= run["args"]["num_games"]
                or "sprt" in run["args"] and sprt["state"] != ""
         )
 
@@ -1154,6 +1156,7 @@ class RunDb:
 
         if run_finished:
             if not task_finished:
+                task["active"] = False
                 self.handle_crash_or_time(run, task_id)
             self.buffer(run, True)
             self.stop_run(run_id)
@@ -1278,7 +1281,7 @@ class RunDb:
         update_residuals(run["tasks"], chi2=chi2) # Marks residual color (and calls crash_or_time, marking such failures not already caught)
         bad_workers = get_bad_workers_by_residual(
             run["tasks"],
-            chi2=chi2,
+            first_chi2=chi2,
             p=p,
             res=res,
             iters=iters - 1 if message == "" else iters,

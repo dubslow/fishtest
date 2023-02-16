@@ -66,7 +66,7 @@ def task_purge_and_copy(task):
             "crashes": 0,
             "time_losses": 0,
             "pentanomial": 5 * [0],
-    })
+    }
     return purged_task
 
 
@@ -211,12 +211,14 @@ def update_residuals(tasks, chi2=None):
             task_mark_excessive_residual(task)
 
 
-def get_bad_workers_by_residual(tasks, chi2=None, p=0.001, res=7.0, iters=1):
+def get_bad_workers_by_residual(tasks, first_chi2=None, p=0.001, res=7.0, iters=1):
     # If we have an up-to-date result of get_chi2(), pass it to avoid needless
     # recomputation.
     bad_workers = set()
     for _ in range(iters):
-        if chi2 is None:
+        if first_chi2:
+            chi2, first_chi2 = first_chi2, None
+        else:
             chi2 = get_chi2(tasks, exclude_workers=bad_workers)
         worst_user = {}
         residuals = chi2["residual"]
@@ -561,4 +563,4 @@ class BinaryHistory:
         self._l[self._i] = bool(bit)
         self._i = (self._i + 1) % self._n
     def sum(self):
-        return sum(self._;)
+        return sum(self._l)
