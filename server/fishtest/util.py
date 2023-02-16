@@ -36,6 +36,41 @@ def worker_name(worker_info):
     return name
 
 
+def task_mark_excessive_residual(task, residual=None):
+    if residual is not None:
+        task["residual"] = residual
+    task["residual_color"] = "#FF6A6A"
+
+
+def crash_or_time(task):
+    stats = task.get("stats", {})
+    total = stats.get("wins", 0) + stats.get("losses", 0) + stats.get("draws", 0)
+    crashes = stats.get("crashes", 0)
+    time_losses = stats.get("time_losses", 0)
+    failed = crashes > 3 or (total > 20 and time_losses / total > 0.1)
+    if failed:
+        task_mark_excessive_residual(task, 11.0)
+    return failed
+
+
+def task_mark_bad_and_copy(task):
+    # To preserve the number of tasks, we mark it as bad without removing it.
+    bad_task = copy.deepcopy(task)
+    bad_task["task_id"] = task_id
+    bad_task["bad"] = True
+    task["bad"] = True
+    task["active"] = False
+    task["stats"] = {
+            "wins": 0,
+            "losses": 0,
+            "draws": 0,
+            "crashes": 0,
+            "time_losses": 0,
+            "pentanomial": 5 * [0],
+    })
+    return bad_task
+
+
 def get_chi2(tasks, exclude_workers=set()): # All (global) invocations of this function share the same set() (!)
     """Perform chi^2 test on the stats from each worker"""
 
@@ -156,20 +191,6 @@ def get_chi2(tasks, exclude_workers=set()): # All (global) invocations of this f
     }
 
 
-def task_mark_failed(task, residual=None):
-    if residual is not None:
-        task["residual"] = residual
-    task["residual_color"] = "#FF6A6A"
-
-
-def crash_or_time(task):
-    stats = task.get("stats", {})
-    total = stats.get("wins", 0) + stats.get("losses", 0) + stats.get("draws", 0)
-    crashes = stats.get("crashes", 0)
-    time_losses = stats.get("time_losses", 0)
-    return crashes > 3 or (total > 20 and time_losses / total > 0.1)
-
-
 def get_bad_workers_by_residual(tasks, chi2=None, p=0.001, res=7.0, iters=1):
     # If we have an up-to-date result of get_chi2(), pass it to avoid needless
     # recomputation.
@@ -201,22 +222,19 @@ def update_residuals(tasks, chi2=None):
     residuals = chi2["residual"]
 
     for task in tasks:
-        if "bad" in task:
+        if "bad" in task or crash_or_time(task) or "worker_info" not in task:
             continue
-        if "worker_info" not in task:
-            continue
+
         task["residual"] = residuals.get(
             task["worker_info"]["unique_key"], float("inf")
         )
 
-        if crash_or_time(task):
-            task_mark_failed(task, 10.0)
-        elif abs(task["residual"]) < chi2["z_95"]:
+        if abs(task["residual"]) < chi2["z_95"]:
             task["residual_color"] = "#44EB44"
         elif abs(task["residual"]) < chi2["z_99"]:
             task["residual_color"] = "yellow"
         else:
-            task_mark_failed(task)
+            task_mark_excessive_residual(task)
 
 
 def format_bounds(elo_model, elo0, elo1):
