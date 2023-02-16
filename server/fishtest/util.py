@@ -47,9 +47,9 @@ def crash_or_time(task):
     total = stats.get("wins", 0) + stats.get("losses", 0) + stats.get("draws", 0)
     crashes = stats.get("crashes", 0)
     time_losses = stats.get("time_losses", 0)
-    failed = crashes > 3 or (total > 20 and time_losses / total > 0.1)
+    failed = crashes > 3 or (time_losses * 25 > total + 25)
     if failed:
-        task_mark_excessive_residual(task, 11.0)
+        task_mark_excessive_residual(task, 10.0)
     return failed
 
 
