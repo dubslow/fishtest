@@ -1271,8 +1271,7 @@ class RunDb:
                 # The next two lines are a bit hacky but
                 # the correct residual and color may not have
                 # been set yet.
-                bad_task["residual"] = 10.0
-                bad_task["residual_color"] = "#FF6A6A"
+                task_mark_failed(bad_task, 10.0)
                 bad_task["task_id"] = task_id
                 bad_task["bad"] = True
                 run["bad_tasks"].append(bad_task)

@@ -156,6 +156,12 @@ def get_chi2(tasks, exclude_workers=set()): # All (global) invocations of this f
     }
 
 
+def task_mark_failed(task, residual=None):
+    if residual is not None:
+        task["residual"] = residual
+    task["residual_color"] = "#FF6A6A"
+
+
 def crash_or_time(task):
     stats = task.get("stats", {})
     total = stats.get("wins", 0) + stats.get("losses", 0) + stats.get("draws", 0)
@@ -204,14 +210,13 @@ def update_residuals(tasks, chi2=None):
         )
 
         if crash_or_time(task):
-            task["residual"] = 10.0
-            task["residual_color"] = "#FF6A6A"
+            task_mark_failed(task, 10.0)
         elif abs(task["residual"]) < chi2["z_95"]:
             task["residual_color"] = "#44EB44"
         elif abs(task["residual"]) < chi2["z_99"]:
             task["residual_color"] = "yellow"
         else:
-            task["residual_color"] = "#FF6A6A"
+            task_mark_failed(task)
 
 
 def format_bounds(elo_model, elo0, elo1):
